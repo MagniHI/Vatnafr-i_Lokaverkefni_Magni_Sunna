@@ -1,0 +1,302 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[icelandic]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\geometry{margin=2.5cm}
+
+\title{Aðferðir -- Vatnafræðigreining Ölfusár við Selfoss}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Gögn og tímabil}
+% Skrift: 00\_hreinsa\_gogn.py
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Gögnin eru sótt úr LamaH-Ice gagnasafninu fyrir Ölfusá við Selfoss (stöð ID~98).
+Notaðar eru dagleg mælingar á rennsli [m$^3$/s], úrkomu [mm/dag] og hitastigi [$^\circ$C]
+úr CARRA endurgreiningu, yfir vatnafræðilegt tímabil 1993--2023 (30~ár,
+1.~október~1993 -- 30.~september~2023).
+
+Gögn um rennsli og veðurfar eru síuð yfir tímabilið og úthlutað í tvær hreinar
+CSV-skrár sem allar niðurstreymis skriptur nota. Neikvæð rennslisgildi eru sett
+sem vantar (\texttt{NaN}). Úrkoma er sótt úr CARRA endurgreiningu og er ERA5-Land
+gögn notuð sem varabúnaður þar sem CARRA gögn vantar.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Lýsing vatnasviðs}
+% Skrift: 01\_lysing\_vatnasviðs.py
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Eiginleikar vatnasviðsins eru sóttir úr \texttt{Catchment\_attributes.csv}
+gagnaskránni og kynntir í töfluformi og súluriti. Meðal þeirra eiginleika sem
+eru kynntir eru flatarmál, meðalhæð, miðgildi hæðar, hæðarbil, meðalhalli,
+löngungarstuðull, lækjaþéttleiki, landnýtingarhlutföll (jökull, bert land,
+kjarr, votlendi, landbúnaður, skógur, stöðuvatn, þéttbýli), veðurfar og
+grunnvatnshlutfall.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Árstíðasveifla}
+% Skrift: 02\_arstidarsveifla.py
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Mánaðarleg meðaltöl (climatology) fyrir rennsli, úrkomu og hitastig eru reiknuð
+með meðaltali yfir öll 30~ár og sett fram á þríhluta mynd. Staðalfrávik er
+reiknað til að sýna náttúrulega sveiflukenningu.
+
+Mánaðarsummur úrkomu eru reiknaðar á hvern mánuð á hverju ári
+(með \texttt{resample("ME").sum()}) og síðan tekið meðaltal og staðalfrávik
+þessara 30 mánaðarsumma til að gefa rétta lýsingu á mánaðarlegri úrkomudreifingu.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Mat á grunnvatnsframlagi}
+% Skrift: 03\_grunnvatnsframlag.py
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Þrjár aðferðir eru notaðar til að meta grunnvatnsframlag í heildarrennsli.
+
+\subsection{Lyne-Hollick stafræn sía}
+
+Síunni er beitt til að skilja á milli grunnvatnsrennslis (baseflow) og
+skyndirennslis (quickflow) \cite{Ladson2013}. Jafnan er:
+
+\begin{equation}
+    f_t = \alpha \cdot f_{t-1} + \frac{1+\alpha}{2}\bigl(Q_t - Q_{t-1}\bigr)
+    \label{eq:lyne-hollick}
+\end{equation}
+
+þar sem $f_t$ er skyndirennsli á degi~$t$, $Q_t$ er heildarrennsli og
+$\alpha = 0{,}925$ er síufæribreyta \cite{Ladson2013}.
+Síunni er beitt þrjú skipti (fram--aftur--fram) til að fjarlægja fasaflökt.
+Grunnvatn er metið sem $b_t = Q_t - f_t$, þar sem $b_t$ er klippt í bilið
+$[0,\, Q_t]$.
+
+\subsection{Grunnvatnshlutfall (Baseflow Index)}
+
+Grunnvatnshlutfall (BFI) er reiknað sem:
+
+\begin{equation}
+    \mathrm{BFI} = \frac{\displaystyle\sum_{t} b_t}{\displaystyle\sum_{t} Q_t}
+    \label{eq:bfi}
+\end{equation}
+
+þar sem gildi nálægt~1 þýðir að grunnvatn ræður ríkjum, en gildi nálægt~0
+þýðir að skyndirennsli er ríkjandi. BFI er einnig reiknað fyrir hvert
+vatnafræðilegt ár til að meta breytileika milli ára.
+
+\subsection{Recession-greining}
+
+Samfelldir samdráttarhlutАР eru greindir þar sem rennsli lækkar samfellt og
+enginn úrkoma er til staðar ($P < 0{,}5$~mm/dag í að minnsta kosti 5~daga).
+Recession constant~$k$ er metin með línulegri aðhvarfsgreiningu á $\ln(Q)$
+sem fall af tíma:
+
+\begin{equation}
+    Q(t) = Q_0 \cdot e^{-kt}
+    \label{eq:recession}
+\end{equation}
+
+þar sem $Q_0$ er rennsli við upphaf samdráttar og $k$ er recession constant
+[dag$^{-1}$]. Miðgildi $k$ yfir öll greind brot er notað sem dæmigerð gildi.
+Úr $k$ eru einnig leiddar geymslufastin $\tau = 1/k$ og halftíminn
+$t_{1/2} = \ln 2 / k$.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Vatnsjafnaðargreining}
+% Skrift: 04\_grunnliking.py
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Grunnlíking vatnafræðinnar er notuð til að meta vatnsbúskap vatnasviðsins:
+
+\begin{equation}
+    P = Q + ET + \Delta S
+    \label{eq:water-balance}
+\end{equation}
+
+þar sem $P$ er úrkoma, $Q$ er afrennsli, $ET$ er uppgufun (úr CARRA
+endurgreiningu) og $\Delta S$ er breyting á geymslu, reiknuð sem leifð.
+Rennsli er umreiknað úr m$^3$/s í mm/dag með:
+
+\begin{equation}
+    Q_{\mathrm{mm}} = Q_{\mathrm{m^3/s}} \cdot \frac{86\,400}{A \times 10^6}
+    \times 1000
+    \label{eq:q-conversion}
+\end{equation}
+
+þar sem $A$ er flatarmál vatnasviðsins í km$^2$. Jákvætt $\Delta S$ þýðir
+aukningu í geymslu (snjór, jökull, grunnvatn) en neikvætt $\Delta S$ þýðir
+geymslutæmingu, t.d.\ vegna jökulbræðslu. Greiningin er gerð bæði á daglegum
+gögnum og á árslegum vatnafræðilegum árum (október--september).
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Langæislína (Flow Duration Curve)}
+% Skrift: 05\_langaeslina.py
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Öll daglegt rennsli er raðað í lækkandi röð og yfirfallstíðni reiknuð með
+Weibull plotting position:
+
+\begin{equation}
+    P(i) = \frac{i}{N+1} \times 100\%
+    \label{eq:weibull}
+\end{equation}
+
+þar sem $i$ er röðunarnúmer (1~=~hæsta gildi) og $N$ er heildarfjöldi gilda.
+Lykilgildi Q5, Q50 og Q95 eru fundin með línulegri brúun, og hlutfallið
+$Q5/Q95$ er notað sem mælikvarði á sveiflukenni rennslis. Langæislínan er
+einnig teiknuð á árstíðabundnum grunni (vor, sumar, haust, vetur) til að
+sýna hvernig dreifingin breytist eftir árstímum.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Flóðagreining}
+% Skrift: 06\_flodagreining.py
+% ═══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Flóðatíðni eftir mánuðum}
+
+Árstoppar eru greindir eftir vatnafræðilegu ári (október--september) og
+flokkaðir eftir mánuðum til að meta árstíðabundin mynstur í flóðatíðni.
+
+\subsection{Líkindadreifingargreining}
+
+Þrjár líkindadreifingar eru passar á árstoppa með Gringorten plotting
+positions \cite{Gringorten1963}:
+
+\begin{equation}
+    F(i) = \frac{i - 0{,}44}{N + 0{,}12}
+    \label{eq:gringorten}
+\end{equation}
+
+þar sem $F(i)$ er uppsöfnuð líkindafall og endurkomutími er $T = 1/(1-F)$.
+Dreifinganna þrjár sem eru prófaðar eru:
+
+\begin{itemize}
+    \item \textbf{Gumbel (EV Type~I):}
+    \begin{equation}
+        F(x) = \exp\!\bigl(-e^{-(x-\mu)/\beta}\bigr), \quad
+        \beta = \frac{\sigma\sqrt{6}}{\pi}, \quad
+        \mu = \bar{x} - 0{,}5772\,\beta
+        \label{eq:gumbel}
+    \end{equation}
+
+    \item \textbf{Log Normal 3 stika (LN3):}
+    $\log(X - \xi) \sim \mathcal{N}(\mu_{\ln},\, \sigma_{\ln}^2)$
+    þar sem neðri mörk $\xi$ eru fundin með lágmörkun RMSE á CDF-passan
+    og stikamöt framkvæmd með MLE.
+
+    \item \textbf{Log Pearson 3 stika (LP3):}
+    $y = \log_{10}(Q)$ fylgir Pearson Type~III dreifingu með stika
+    $\bar{y}$, $s$ og skekju~$g$ (sample skewness).
+\end{itemize}
+
+Besta dreifing er valin með lægstu samlægri RMSE á heildarpassun og
+halapassun (efri 25\% toppa). Endurkomutímar Q10, Q50 og Q100 eru reiknuð
+með 90\% öryggisbilum, metin með bootstrap-aðferð
+($N_{\mathrm{boot}} = 2000$ endurteiknanir, 5.\ og 95.\ hundraðshlutfall).
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Leitnigreining}
+% Skrift: 07\_leitnigreining.py
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Tvær tölfræðilegar aðferðir eru notaðar samhliða til að greina leitni í
+rennsli, úrkomu og hitastigi.
+
+\subsection{Modified Mann-Kendall próf}
+
+Modified Mann-Kendall próf \cite{Hamed1998} leiðréttir fyrir sjálffylgni í
+tímaröðum, sem er algeng í vatnafræðilegum gögnum. Marktækni er metin við
+$p < 0{,}05$. Prófið er beitt á árlegar, mánaðarlegar og árstíðabundnar
+tímaraðir.
+
+\subsection{Theil-Sen hallatala}
+
+Theil-Sen hallatalan \cite{Sen1968, Theil1950} er öflugt mat á leitni sem er
+ónæmt fyrir útlögum. Hallatalan er metin sem miðgildi allra parpara
+hlutfallslegra breytinga:
+
+\begin{equation}
+    \hat{\beta} = \operatorname{median}\!\left(\frac{y_j - y_i}{x_j - x_i}
+    \right), \quad i < j
+    \label{eq:theil-sen}
+\end{equation}
+
+Heildarbreyting yfir tímabilið er reiknuð sem hlutfallsleg breyting á milli
+upphafs og loka aðhvarfslínunnar. Leitni er greind á þremur stigum: árlegum,
+mánaðarlegum (fyrir hvern mánuð) og árstíðabundnum (vor, sumar, haust, vetur).
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\section{Greining á rennslisatburði}
+% Skrift: 08\_rennslisatburdur.py
+% ═══════════════════════════════════════════════════════════════════════════════
+
+Stærsta flóð á mælingatímabilinu (21.~desember~2006,
+$Q_{\max} = 1931$~m$^3$/s) er greint í smáatriðum sem dæmi um
+hlýviðurflóð (rain-on-snow). Í aðdraganda flóðsins var kalt ($-7$ til
+$-9\,^\circ$C) og mikill snjór lagðist á vatnasviðið (6.--17.~des.).
+Þegar hlýtt rigndi 18.--21.~des.\ ($T > 0\,^\circ$C) bræddu bæði snjór
+og rigning saman og olli skyndilegri flóðbylgju.
+
+Lykilstærðir sem metnar eru:
+
+\begin{itemize}
+    \item \textbf{Time-to-peak:} tími frá upphafi rennslisaukningar að
+    $Q_{\max}$.
+
+    \item \textbf{Recession time:} metið með $k$ úr jöfnu~\eqref{eq:recession}:
+    \begin{equation}
+        t_{\mathrm{rec}} = \frac{\ln(Q_{\max}/Q_{\mathrm{base}})}{k}
+        \label{eq:recession-time}
+    \end{equation}
+    þar sem $Q_{\mathrm{base}}$ er grunnrennsli fyrir flóðið og $k$ er
+    recession constant metin í skrefi~4.
+
+    \item \textbf{Excess rain release:} tími frá lokum meginúrkomu þangað
+    til rennsli snýr aftur að $Q_{\mathrm{base}}$, metið með
+    $t_{\mathrm{rec}}$.
+\end{itemize}
+
+Atburðurinn er settur fram á þríhluta mynd með rennsli, úrkomu og hitastigi
+samhliða til að sýna tengsl milli veðurfarlegs og vatnafræðilegs þróunar
+flóðsins.
+
+% ═══════════════════════════════════════════════════════════════════════════════
+\begin{thebibliography}{9}
+
+\bibitem{Ladson2013}
+Ladson, A.~R., Brown, R., Neal, B., og Nathan, R. (2013).
+A standard approach to baseflow separation using the Lyne and Hollick filter.
+\textit{Australasian Journal of Water Resources}, 17(1), 25--34.
+
+\bibitem{Hamed1998}
+Hamed, K.~H. og Ramachandra Rao, A. (1998).
+A modified Mann-Kendall trend test for autocorrelated data.
+\textit{Journal of Hydrology}, 204(1--4), 182--196.
+
+\bibitem{Sen1968}
+Sen, P.~K. (1968).
+Estimates of the regression coefficient based on Kendall's tau.
+\textit{Journal of the American Statistical Association}, 63(324), 1379--1389.
+
+\bibitem{Theil1950}
+Theil, H. (1950).
+A rank-invariant method of linear and polynomial regression analysis.
+\textit{Proceedings of the Royal Netherlands Academy of Sciences}, 53, 386--392.
+
+\bibitem{Gringorten1963}
+Gringorten, I.~I. (1963).
+A plotting rule for extreme probability paper.
+\textit{Journal of Geophysical Research}, 68(3), 813--814.
+
+\end{thebibliography}
+
+\end{document}
